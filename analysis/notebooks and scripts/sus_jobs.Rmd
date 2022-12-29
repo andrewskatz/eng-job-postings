@@ -1,0 +1,254 @@
+---
+title: "Sustainability Jobs"
+author: "Katz et al."
+date: "5/5/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+### Sustainability Jobs
+
+
+```{r}
+data_path <- "G:/My Drive/AK Faculty/Research/Projects/project political economy of engineering education/project engineering jobs/"
+
+data_file <- "sustainability_US_20210411.csv"
+
+sus_df <- read_csv(paste0(data_path, data_file))
+```
+
+
+```{r}
+# corrections to original data file
+
+# add collection country (before this was automatically added in data collection)
+#sus_df <- sus_df %>% 
+#  mutate(country = "US")
+
+
+# replace X1 (from python to_csv() function) with "entry_id" name instead
+#sus_df <- sus_df %>% rename(entry_id = X1)
+
+
+#sus_df %>% write_csv("sustainability_US_20210411.csv")
+
+```
+
+
+
+```{r}
+
+# clean for cortext
+# 
+# sus_df <- sus_df %>% 
+#   mutate(education = str_replace(education, "\\[\\]", "no value reported")) %>% 
+#   mutate(education = str_remove(education, "\\[")) %>% 
+#   mutate(education = str_remove(education, "\\]")) %>% 
+#   mutate(education = str_remove_all(education, '"')) %>% 
+#   mutate(education = str_remove_all(education, "'")) %>% 
+#   mutate(education = str_replace_all(education, ', ', ',')) %>% 
+#   mutate(education = str_replace_all(education, ",", "***")) 
+# 
+# 
+# 
+# # Remove brackets and quotation marks from skills list
+# 
+# sus_df <- sus_df %>% 
+#   mutate(skills = str_replace(skills, "\\[\\]", "no value reported")) %>% 
+#   mutate(skills = str_remove(skills, "\\[")) %>% 
+#   mutate(skills = str_remove(skills, "\\]")) %>% 
+#   mutate(skills = str_remove_all(skills, '"')) %>% 
+#   mutate(skills = str_remove_all(skills, "'")) %>% 
+#   mutate(skills = str_replace_all(skills, ', ', ',')) %>% 
+#   mutate(skills = str_replace_all(skills, ",", "***")) 
+# 
+# 
+# sus_df %>% write_csv("sustainability_cortext_20210411.csv")
+
+```
+
+
+
+
+
+```{r}
+
+# Remove brackets from education lists and replace empty brackets with "no value reported"
+
+sus_df <- sus_df %>% 
+  mutate(education = str_replace(education, "\\[\\]", "no value reported")) %>% 
+  mutate(education = str_remove(education, "\\[")) %>% 
+  mutate(education = str_remove(education, "\\]")) %>% 
+  mutate(education = str_remove_all(education, '"')) %>% 
+  mutate(education = str_remove_all(education, "'")) %>% 
+  mutate(education = str_replace_all(education, ', ', ','))
+
+
+
+# Remove brackets and quotation marks from skills list and replace empty brackets with "no value reported"
+
+sus_df <- sus_df %>% 
+  mutate(skills = str_replace(skills, "\\[\\]", "no value reported")) %>% 
+  mutate(skills = str_remove(skills, "\\[")) %>% 
+  mutate(skills = str_remove(skills, "\\]")) %>% 
+  mutate(skills = str_remove_all(skills, '"')) %>% 
+  mutate(skills = str_remove_all(skills, "'")) %>% 
+  mutate(skills = str_replace_all(skills, ', ', ','))
+
+
+
+
+
+```
+
+
+
+
+```{r}
+# make indicator columns for education
+
+sus_df <- sus_df %>% 
+  separate_rows(education, sep = ',') %>% 
+  mutate(y = 1) %>% 
+  spread(education, y, fill = 0)
+
+# check to make sure spaces after comma don't mess up the degree names
+#names(sus_df)
+
+```
+
+
+
+
+
+
+
+```{r}
+# make indicator columns for skills
+sus_df <- sus_df %>% 
+  separate_rows(skills, sep = ',') %>% 
+  mutate(y = 1) %>% 
+  spread(skills, y, fill = 0)
+
+
+#names(sus_df)
+
+#last(names(sus_df))
+```
+
+
+
+```{r}
+
+# look at distribution of skills
+plot_title <- "Sustainability in Engineering Job Skills"
+
+sus_df %>% 
+  select(.NET:last(names(sus_df))) %>% 
+  pivot_longer(cols = .NET:last(names(sus_df)), names_to = "skill", values_to = "indicator") %>% 
+  group_by(skill) %>% 
+  summarize(skill_count = sum(indicator)) %>% 
+  arrange(desc(skill_count)) %>% 
+  top_n(n = 50, wt = skill_count) %>% 
+  ggplot(aes(x = fct_reorder(skill, skill_count), y = skill_count)) +
+  geom_col() +
+  coord_flip() +
+  labs(x = "Skill",
+       y = "Count",
+       title = plot_title) +
+  theme_light() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+ggsave(filename = paste0(plot_title, ".png"),
+       plot = last_plot(),
+       width = 7,
+       height = 7,
+       dpi = "print"
+       )
+
+```
+
+
+
+
+
+
+### Look at geographic distributions
+
+
+```{r}
+sus_df %>% count(location, sort = TRUE)
+
+sus_df <- sus_df %>% separate(location, into = c("city", "state"), sep = ",", fill = "left", remove = FALSE)
+sus_df <- sus_df %>% mutate(state = str_squish(state))
+
+sus_df %>% count(state, sort = TRUE)
+
+
+```
+
+
+
+
+
+```{r}
+# stores state gis data
+MainStates <- map_data("state")
+
+# check to make sure state plot works
+# MainStates %>% ggplot(aes(x=long, y=lat, group=group)) +
+#   geom_polygon(color="black", fill="lightblue" )
+
+# store state abbreviation and names in dataframe to get names in jobs dataframe
+state_abbs <- tibble(state_name = state.name, state_abb = state.abb) %>% 
+  mutate(state_name = str_to_lower(state_name))
+
+sus_df <- sus_df %>% left_join(state_abbs, by = c("state" = "state_abb"))
+
+sus_df <- sus_df %>% 
+  mutate(state_name = case_when(!is.na(state_name) ~ state_name,
+                               is.na(state_name) ~ state),
+         state_name = str_to_lower(state_name),
+         state_name = case_when(state_name == "dc" ~ "district of columbia",
+                                TRUE ~ state_name))
+
+#get counts of jobs in each state
+state_counts <- sus_df %>% count(state_name) 
+
+# use left join instead of inner_join to keep north dakota in the map data set
+MergedStates <- left_join(MainStates, state_counts, by = c("region" = "state_name")) %>% 
+  mutate(n = replace_na(n, 0)) # to handle the 0 from North Dakota
+
+
+job_map <- MergedStates %>% ggplot() + 
+  geom_polygon(aes(x=long, y=lat, group=group, fill = log2(n)), 
+          color="white", size = 0.2) +
+  coord_map(projection = "albers", lat0 = 39, lat1 = 45) +
+  labs(title = "Number of Job Postings by State for 'Sustainability'",
+       x = "",
+       y = "") +
+  theme_light() +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.text.x=element_blank(),
+        axis.text.y=element_blank())
+
+job_map
+
+plot_title <- "sustainability jobs map"
+ggsave(filename = paste0(plot_title, ".png"),
+       plot = job_map,
+       width = 7,
+       height = 7,
+       dpi = "print"
+       )
+
+```
+
+
+
+
